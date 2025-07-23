@@ -2541,6 +2541,7 @@ def v8_transforms(dataset, imgsz: int, hyp: IterableSimpleNamespace, stretch: bo
         >>> transforms = v8_transforms(dataset, imgsz=640, hyp=hyp)
         >>> augmented_data = transforms(dataset[0])
     """
+    print(hyp)
     mosaic = Mosaic(dataset, imgsz=imgsz, p=hyp.mosaic)
     affine = RandomPerspective(
         degrees=hyp.degrees,
@@ -2575,12 +2576,12 @@ def v8_transforms(dataset, imgsz: int, hyp: IterableSimpleNamespace, stretch: bo
     return Compose(
         [
             pre_transform,
-            MixUp(dataset, pre_transform=pre_transform, p=hyp.mixup),
-            CutMix(dataset, pre_transform=pre_transform, p=hyp.cutmix),
-            Albumentations(p=1.0),
-            RandomHSV(hgain=hyp.hsv_h, sgain=hyp.hsv_s, vgain=hyp.hsv_v),
-            RandomFlip(direction="vertical", p=hyp.flipud, flip_idx=flip_idx),
-            RandomFlip(direction="horizontal", p=hyp.fliplr, flip_idx=flip_idx),
+            MixUp(dataset, pre_transform=pre_transform, p=hyp.mixup), # always disabled if p=0.0
+            CutMix(dataset, pre_transform=pre_transform, p=hyp.cutmix), # always disabled if p=0.0
+            Albumentations(p=1.0), # disabled iff image does not have 3 channels
+            RandomHSV(hgain=hyp.hsv_h, sgain=hyp.hsv_s, vgain=hyp.hsv_v), # always disabled if the images do not have 3 channel
+            RandomFlip(direction="vertical", p=hyp.flipud, flip_idx=flip_idx), # always disabled if p=0.0
+            RandomFlip(direction="horizontal", p=hyp.fliplr, flip_idx=flip_idx), # always disabled if p=0.0
         ]
     )  # transforms
 

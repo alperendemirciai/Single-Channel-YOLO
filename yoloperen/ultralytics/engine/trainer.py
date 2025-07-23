@@ -55,6 +55,65 @@ from ultralytics.utils.torch_utils import (
     unset_deterministic,
 )
 
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
+import torchvision.transforms.functional as TF
+import os
+
+
+def visualize_batch(batch, save_dir=None, max_images=8):
+    """
+    Visualize YOLO-format grayscale training batch.
+
+    Args:
+        batch (dict): Dictionary with keys: 'img', 'bboxes', 'cls', 'batch_idx', 'im_file'.
+        save_dir (str): If provided, save the plots to this directory.
+        max_images (int): Maximum number of images to visualize.
+    """
+    imgs = batch["img"]
+    bboxes = batch["bboxes"]
+    labels = batch["cls"]
+    batch_indices = batch["batch_idx"]
+    file_paths = batch["im_file"]
+
+    imgs = imgs.squeeze(1).cpu().numpy()  # [B, H, W], assuming 1 channel
+    bboxes = bboxes.cpu().numpy()
+    labels = labels.cpu().numpy()
+    batch_indices = batch_indices.cpu().numpy()
+
+    for i in range(min(len(imgs), max_images)):
+        img = imgs[i]
+        fig, ax = plt.subplots(1, 1, figsize=(8, 8))
+        ax.imshow(img, cmap="gray")
+        ax.set_title(f"Image: {os.path.basename(file_paths[i])}")
+        ax.axis("off")
+
+        # Get all boxes for this image
+        indices = batch_indices == i
+        boxes = bboxes[indices]
+        classes = labels[indices]
+
+        for box, cls in zip(boxes, classes):
+            cx, cy, w, h = box
+            x1 = (cx - w / 2) * img.shape[1]
+            y1 = (cy - h / 2) * img.shape[0]
+            bw = w * img.shape[1]
+            bh = h * img.shape[0]
+
+            rect = patches.Rectangle((x1, y1), bw, bh, linewidth=2,
+                                     edgecolor='red', facecolor='none')
+            ax.add_patch(rect)
+            ax.text(x1, y1 - 5, f"cls {int(cls[0])}", color='red',
+                    fontsize=8, backgroundcolor='white')
+
+        plt.tight_layout()
+        if save_dir:
+            os.makedirs(save_dir, exist_ok=True)
+            save_path = os.path.join(save_dir, f"debug_image_{i}.png")
+            plt.savefig(save_path)
+            plt.close()
+        else:
+            plt.show()
 
 class BaseTrainer:
     """
@@ -402,7 +461,23 @@ class BaseTrainer:
 
                 # Forward
                 with autocast(self.amp):
+                    print("BaseTrainer: _do_train: Forward pass")
+
+                    # Visualize raw batch before preprocessing (if you want)
+                    # batch is usually (imgs, targets, paths, _) or similar, depends on your dataloader
+        
+                    print(batch)
+                    
+                    visualize_batch(batch, save_dir=str(self.save_dir / f"vis_epoch{epoch}_batch{i}"))
+
                     batch = self.preprocess_batch(batch)
+
+                    print("BaseTrainer: _do_train: Preprocessed batch")
+
+                    print(batch)
+                    # Visualize after preprocessing (likely normalized and tensor form)
+                    visualize_batch(batch, save_dir=str(self.save_dir / f"vis_epoch{epoch}_batch{i}_preprocessed"))
+
                     loss, self.loss_items = self.model(batch)
                     self.loss = loss.sum()
                     if RANK != -1:
