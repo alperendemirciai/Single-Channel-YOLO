@@ -317,6 +317,50 @@ class Compose:
         return f"{self.__class__.__name__}({', '.join([f'{t}' for t in self.transforms])})"
 
 
+class Resize640:
+    """
+    Resize image and its bounding boxes directly to 640x640 without preserving aspect ratio.
+
+    This class forcefully resizes the image and rescales bounding boxes linearly.
+    """
+
+    def __init__(self, new_shape: Tuple[int, int] = (640, 640)):
+        self.new_shape = new_shape  # (height, width)
+
+    def __call__(self, labels: Dict[str, Any] = None, image: np.ndarray = None) -> Union[Dict[str, Any], np.ndarray]:
+        if labels is None:
+            labels = {}
+        img = labels.get("img") if image is None else image
+        orig_h, orig_w = img.shape[:2]
+        new_h, new_w = self.new_shape
+
+        # Resize the image directly
+        img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+        if img.ndim == 2:
+            img = img[..., None]
+
+        # Scale ratios for width and height
+        r_w = new_w / orig_w
+        r_h = new_h / orig_h
+
+        if len(labels):
+            labels = self._update_labels(labels, (r_w, r_h))
+            labels["img"] = img
+            labels["resized_shape"] = self.new_shape
+            return labels
+        else:
+            return img
+
+    @staticmethod
+    def _update_labels(labels: Dict[str, Any], ratio: Tuple[float, float]) -> Dict[str, Any]:
+        r_w, r_h = ratio
+        labels["instances"].convert_bbox(format="xyxy")
+        labels["instances"].denormalize(*labels["img"].shape[:2][::-1])  # original size
+        labels["instances"].scale(r_w, r_h)
+        return labels
+
+
+
 class BaseMixTransform:
     """
     Base class for mix transformations like Cutmix, MixUp and Mosaic.
@@ -2541,7 +2585,8 @@ def v8_transforms(dataset, imgsz: int, hyp: IterableSimpleNamespace, stretch: bo
         >>> transforms = v8_transforms(dataset, imgsz=640, hyp=hyp)
         >>> augmented_data = transforms(dataset[0])
     """
-    print(hyp)
+    #print(hyp)
+    force_resize = Resize640(new_shape=(640,640))
     mosaic = Mosaic(dataset, imgsz=imgsz, p=hyp.mosaic)
     affine = RandomPerspective(
         degrees=hyp.degrees,
